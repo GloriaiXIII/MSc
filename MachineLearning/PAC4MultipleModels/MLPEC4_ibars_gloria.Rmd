@@ -1,0 +1,878 @@
+---
+title: "Predicción de dolencias cardiacas a partir de un electrocardiograma"
+author: "Glòria Ibars"
+date: '`r format(Sys.Date(),"%e de %B, %Y")`'
+output:
+  html_document:
+    toc: yes
+    toc_depth: 2
+    toc_float: yes
+  pdf_document:
+    toc: yes
+    toc_depth: 2
+---
+
+```{r setup, include=FALSE}
+# knitr options
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r libraries, include=FALSE, cache=TRUE}
+#Instal·lem i llegim les llibreries necessàries
+
+if (!require(knitr)) {
+    install.packages("knitr")
+    library(knitr)
+}
+
+if (!require(tidyr)) {
+    install.packages("tidyr")
+    library(tidyr)
+}
+
+if (!require(pROC)) {
+    install.packages("pROC")
+    library(pROC)
+}
+
+
+if (!require(ROCR)) {
+    install.packages("ROCR")
+    library(ROCR)
+}
+
+if (!require(caret)) {
+    install.packages("caret")
+    library(caret)
+}
+
+if (!require(kernlab)) {
+    install.packages("kernlab")
+    library(kernlab)
+}
+
+if (!require(ggplot2)) {
+    install.packages("ggplot2")
+    library(ggplot2)
+}
+
+if (!require(htmlTable)) {
+    install.packages("htmlTable")
+    library(htmlTable)
+}
+
+if (!require(corrplot)) {
+    install.packages("corrplot")
+    library(corrplot)
+}
+
+if (!require(gridExtra)) {
+    install.packages("gridExtra")
+    library(gridExtra)
+}
+
+if (!require(randomForest)) {
+    install.packages("randomForest")
+    library(randomForest)
+}
+
+if (!require(C50)) {
+    install.packages("C50")
+    library(C50)
+}
+
+if (!require(neuralnet)) {
+    install.packages("neuralnet")
+    library(neuralnet)
+}
+
+if (!require(e1071)) {
+    install.packages("e1071")
+    library(e1071)
+}
+
+if (!require(class)) {
+    install.packages("class")
+    library(class)
+}
+
+if (!require(gmodels)) {
+    install.packages("gmodels")
+    library(gmodels)
+}
+
+if (!require(tidyverse)) {
+    install.packages("tidyverse")
+    library(tidyverse)
+}
+
+```
+
+# Introducción
+Se dispone del resultado de 1200 electrocardiogramas (ECG) en pacientes con algún de estos 4 tipos de problemas cardíacos: Arrhythmia (ARR), Congestive Heart Failure (CHF), Atrial Fibrillation (AFF), Normal Sinus Rhythm (NSR). El número de variables recogidas es de 54. La primera variable RECORD se usa como identificador. La ultima variable corresponde a la clase y el resto son las variables explicativas de tipo numérico. Como muestra se presentan las 8 primeras:
+• hbpermin: Heart beat per minute
+• Pseg: P wave segment length in ms
+• PQseg: PQ segment length in ms
+• QRSseg: QRS segment length in ms
+• QRseg: QR segment length in ms
+• QTseg: QT segment length in ms
+• RSseg: RS segment length in ms
+• STseg: ST segment length in m
+
+Objetivo:
+El objetivo de este análisis es **predecir el tipo de dolencia cardíaca** de los pacientes a partir de la información recogida en el ECG. Los datos se encuentran en el fichero ECGCvdata.csv. La columna 56 contiene la clase.
+
+En esta PEC se analizan los datos mediante la implementación de los diferentes algoritmos estudiados: k-Nearest Neighbour, Naive Bayes, Artificial Neural Network, Support Vector Machine, Arbol de Decisión y Random Forest para predecir el tipo de docencia cardíaca.
+
+Puntos importantes:
+1. La PEC se puede implementar en R o en Python o, combinando ambos. El informe de la PEC se realizará en Rmarkdown o notebook para Python.
+
+2. Se debe aplicar la misma selección de datos training y test en todos los algoritmos. Utilizando la semilla aleatoria 12345, para separar los datos en dos partes, una parte para training (67%) y otra parte para test (33%). Si se prefiere, se puede escoger otro tipo de partición de los datos para hacer la selección de training y test como por ejemplo k-fold crossvalidation, boostrap, random splitting, etc. Lo que es importante es mantener la misma selección para todos los algoritmos.
+
+3. Realizar una exploración de los datos que incluya una estadística descriptiva básica de las variables mediante tablas y gráficos. Si hay valores ausentes ("missing") se eliminaran las variables que los contengan.
+
+4. En todos los casos se evalúa la calidad del algoritmo con la información obtenida de la función confusionMatrix() del paquete caret o equivalente en Python.
+
+5. Para la ejecución especifica de cada algoritmo se puede usar la función de cada algoritmo como se presenta en el libro de referencia o usar el paquete caret con los diferentes modelos de los algoritmos. O incluso, hacer una versión mixta.
+
+6. Comentario sobre el informe dinámico en R. Una opción interesante del knitr es poner cache=TRUE. Por ejemplo: knitr::opts_chunk$set(echo = FALSE, comment = NULL, cache = TRUE) Con esta opción al ejecutar el informe dinámico crea unas carpetas donde se guardan los resultados de los procesos. Cuando se vuelve a ejecutar de nuevo el informe dinámico solo ejecuta código R donde se ha producido cambios, en el resto lee la información previamente descargada. Es una opción muy adecuada cuando la ejecución es muy costosa computacionalmente.
+
+
+# 2. Sección de lectura, exploración de los datos y obtención de los muestras de train y test. Recordar que un primer paso es, si hace falta, transformar las variables leídas al tipo de objeto R y/o Python adecuado al tipo de variable. La exploración de los datos se aplica a todas las variables leídas. Es adecuado realizar gráficos univariantes o multivariantes para realizar este apartado. (Puntuación: 10%)
+
+```{r read_data, cache = TRUE}
+# Definim la ruta del fitxer amb les dades
+file_path <- "C:/Users/glori/Documents/MSc/MachineLearning/machinelearningpec4/ECGCvdata.csv"
+
+# Llegim el fitxer CSV
+ECG <- read.csv(file_path)
+
+# Mostrem les primeres files de les dades d'EGC utilitzant la funció head()
+head(ECG)
+
+# Mostrem l'estructura d'ECG
+str(ECG)
+
+# Mostrem un resum estadístic de les variables numèriques
+summary(ECG)
+```
+
+Utilitzant la funció STR obtenim un resum de l'estructura del data frame ECG. Observem que té 1200 observacions (files; n = 1200) i 56 variables (columnes). Totes les variables són numèriques (int o float) excepte la variable ECG_signal que és de tipus chr (character, text) i conté la classe objectiu a predir. La resta de variables són els atributs excepte la columna RECORD, que és l'índex numèric. De cara a la construcció dels models, s'han d'excloure del conjunt de dades les variables RECORD i ECG_signal, i ECG_signal s'ha de convertir a factor. En el resum estadístic observem l'existència de NA's (valors buits) en determinades columnes i que les variables numèriques han de ser normalitzades per equilibrar els pesos dels diferents atributs.
+
+```{r factor_object, cache = TRUE}
+
+# Convertim la classe a predir de chr a factor
+class_column <- "ECG_signal"
+
+# Definim una funció per convertir una variable a factor 
+convert_to_factor <- function(data, variable) {
+  data[[variable]] <- as.factor(data[[variable]])
+  str(data[[variable]])
+  print(levels(data[[variable]]))  # Verifiquem els nivells del factor
+  return(data)
+}
+
+# Utilitzem la funció amb la variable classe
+data <- convert_to_factor(ECG, class_column)
+
+```
+
+Analitzem si hi ha valors absents i eliminem les columnes amb valors absents:
+
+```{r missing_values, cache = TRUE}
+summarise_and_remove_missing <- function(data) {
+  # comprovem si hi ha valors ausents i calculem el percentatge per cada variable
+  missing_values_summary <- colSums(is.na(data))
+  missing_percentage <- missing_values_summary / nrow(data) * 100
+  
+  # Creem un df amb un resum dels valors ausents
+  missing_data_summary <- data.frame(
+    variables_with_missing_data = names(missing_values_summary),
+    Count = missing_values_summary,
+    Percentage = missing_percentage
+  )
+  missing_values <- missing_data_summary[missing_data_summary$Percentage > 0, ]
+  missing_values <- missing_values[order(-missing_values$Percentage), ]
+  print(missing_values)
+  
+  missing_columns <- missing_data_summary$variables_with_missing_data[missing_data_summary$Percentage > 0]
+
+  # Eliminem les columnes amb valors ausents
+  data_cleaned <- data[, !names(data) %in% missing_columns]
+
+  return(list(
+    summary = missing_values_summary,
+    missing_values = missing_values,
+    missing_columns = missing_columns,
+    cleaned_data = data_cleaned
+  ))
+}
+
+result <- summarise_and_remove_missing(ECG)
+ECG_clean <- result$cleaned_data
+
+```
+
+Duem a terme una anàlisi dels valors 0, per detectar si de veritat són 0's o si representen valors buits.
+
+```{r zero_values, cache = TRUE}
+
+summarise_zeros <- function(data) {
+  # comprovem si hi ha valors zeros i calculem el percentatge per cada columna
+  zero_values_summary <- colSums(data == 0)
+  zero_percentage <- zero_values_summary / length(data[, 1]) * 100
+  
+  # Creem un df amb un resum dels valors zeros
+  zero_data_summary <- data.frame(
+    variables_with_zero_data = names(zero_values_summary),
+    Count = zero_values_summary,
+    Percentage = zero_percentage
+  )
+  zero_data_summary <- zero_data_summary[order(-zero_data_summary$Percentage), ]
+  print(zero_data_summary[zero_data_summary$Percentage > 0, ])
+
+  return(list(
+    summary = zero_values_summary,
+    zero_values = zero_data_summary
+  ))
+}
+
+result_with_zeros_analysis <- summarise_zeros(ECG_clean)
+
+```
+
+Observem que hi ha 42 variables que contenen el valor 0, però per quantitat i percentatge, només entre 7 i 8 variables criden la nostra atenció, amb un percentatge de 0s major al 5%. En aquestes variables, s'haurà de determinar a partir d'anàlisis més profunds, si es tracten veritablement de valors 0 o si es tracta de NA's. 
+
+```{r plot_zero_values, cache = TRUE}
+# A continuació analitzarem gràficament les columnes amb 0's 
+
+zero_columns <- result_with_zeros_analysis$zero_values
+zero_columns_grt1 <- zero_columns$variables_with_zero_data[
+  zero_columns$Percentage > 1
+]
+
+# Definim una funció per mostrar gràficament la distribució de les variables amb valors 0
+plot_zero_columns_grt1 <- function(zero_columns_data) {
+  # Filtrem les columnes amb un percentatge de 0's major a l'1%
+  zero_columns_grt1 <- zero_columns_data$variables_with_zero_data[
+    zero_columns_data$Percentage > 1
+  ]
+  
+  if (length(zero_columns_grt1) == 0) {
+    cat("No columns with zero values greater than 1% to plot.\n")
+  } else {
+    for (column in zero_columns_grt1) {
+      hist(data[[column]], main = paste("Histogram of", column),
+           xlab = column, col = "lightblue", border = "black")
+      
+      # afegim la mitjana 
+      abline(v = mean(data[[column]]), col = "red", lwd = 2)
+      
+      # afegim una linea de densitat
+      lines(density(data[[column]]), col = "blue", lwd = 2)
+    }
+  }
+}
+
+plot_zero_columns_grt1(result_with_zeros_analysis$zero_values)
+```
+
+En les variables QRSarea, RSdis, NN50, pNN50, QRdis i QRSperi, la distribució està desviada a la dreta indicant una alta concentració de valors a la part esquerra mentre que a la part dreta, es distribueixen de manera més extensa. En canvi, a les altres variables veiem que la distribució està més compensada tot i que es manté l'alt pes en els valors 0 i a diferència de les altres variables la distribució tendeix a ser bimodal en comptes d'unimodal.
+
+A continuació mostrem els boxplots de les variables numèriques: 
+
+```{r fig.align="center", echo = FALSE, fig.width = 18, cache = TRUE}
+plot_boxplots <- function(data) {
+  long_data <- tidyr::gather(data[, -c(1, ncol(data))], key = "variable", value = "value")
+  ggplot(data = long_data, aes(x = variable, y = value)) +
+    geom_boxplot() +
+    labs(title = "Boxplots of Numeric Values",
+         x = "Variable", y = "Value") +
+    theme_minimal() +
+    scale_x_discrete(guide = guide_axis(angle = 90))
+}
+
+plot_boxplots(ECG_clean)
+```
+
+Tal com hem comprovat prèviament amb el resum estadístic, les variables numèriques han de ser normalitzades per equilibrar i homogeneïtzar els pesos de totes elles en una mateixa escala, i d'aquesta manera, reduir l'impacte de valors extrems i millorant la interpretació relativa de cada variable en el model.
+
+A continuació normalitzem les dades:
+
+```{r normalise_data, cache = TRUE}
+normalise_min_max <- function(data) {
+  numeric_columns <- sapply(data, is.numeric)
+  numeric_columns <- numeric_columns & names(data) != "RECORD"
+  data_normalised <- data
+  data_normalised[, numeric_columns] <- lapply(data_normalised[, numeric_columns], function(x) {
+    (x - min(x, na.rm = TRUE)) / (max(x, na.rm = TRUE) - min(x, na.rm = TRUE))
+  })
+  
+  return(data_normalised)
+}
+
+ECGN <- normalise_min_max(ECG_clean)
+
+summary(ECGN)
+
+
+```
+A través del resum estadístic comprovem que les variables numèriques s'han normalitzat correctament i d'aquesta manera podem comparar i analitzar de manera equitativa les diferents variables. 
+
+```{r plot_boplots_norm, fig.align="center", echo = FALSE, fig.width = 18, cache = TRUE}
+plot_boxplots(ECGN)
+```
+
+Amb les dades normalitzades, observem una distribució més equitativa i compensada.
+
+A continuació convertirem la classe de chr a factor i durem a terme una breu anàlisi:
+
+```{r class_ecgsignal, cache = TRUE}
+class_column <- "ECG_signal"
+data <- convert_to_factor(ECGN, class_column)
+table(ECGN$ECG_signal)
+```
+
+La distribució de la classe és homogènia tenint el mateix pes cada una de les classes a predir.
+
+```{r pca, cache = TRUE}
+# Selecció de les variables per a la PCA 
+variables_pca <- ECGN[, -which(names(ECGN) %in% c("ECG_signal", "RECORD"))]
+
+# Aplicació de la PCA
+pca_result <- prcomp(variables_pca, center = TRUE, scale = TRUE)
+
+# Resum de la PCA
+summary(pca_result)
+
+# Gràfic de les variàncies explicades
+plot(pca_result, type = "l")
+
+```
+
+A través del resum d'importància dels components, podem veure la quantitat de variància en les dades originals que està capturada per cada component principal, la proporció de la variància total i la suma acumulativa de la proporció de variància fins aquell component. De PC1 a PC6 observem que capturen la major part de la variància, explicant per exemple PC1 el 54.18% de la variància i entre PC1 i PC6 s'explica el 91.58% de la variància total.
+
+A continuació analitzem la variabilitat del ritme cardíac. En primer lloc, seleccionem les variables relacionades amb el ritme cardíac: "SDRR", "IBIM", "IBISD", "SDSD", "RMSSD", "QRSarea", "NN50", "pNN50".
+
+```{r heart_rate, cache = TRUE}
+# Selecció de les variables d'HRV
+hrv_variables <- ECGN[, c("SDRR", "IBIM", "IBISD", "SDSD", "RMSSD", "QRSarea", "NN50", "pNN50")]
+
+# Normalització de les variables d'HRV
+hrv_variables <- scale(hrv_variables)
+
+# Càlcul d'una matriu de correlació per a les variables d'HRV
+cor_matrix <- cor(hrv_variables)
+
+# Anàlisi de corbes d'escletxes per a les variables d'HRV
+corrplot(cor_matrix, method = "color")
+
+```
+
+A través de la matriu de correlació observem com cada parell de variables està correlacionat entre si. Els valors de correlació varien de -1 a 1, on -1 indica una correlació negativa perfecta, 1 indica una correlació positiva perfecta, i 0 indica la no correlació. Observem que "SDRR", "IBIM", "IBISD", "SDSD", "RMSSD" tenen força correlació entre si.
+
+A continuació separem les dades en train i test:
+
+```{r train_test, cache = TRUE}
+# Establim la llavor aleatòria 12345 per garantir la reproductibilitat
+set.seed(12345)
+
+# Definim la proporció de dades d'entrenament train
+train_proportion <- 0.67
+
+# Creem un índex amb les files d'entrenament
+train_index <- sample(1:nrow(ECGN), nrow(ECGN) * train_proportion)
+
+# Separem les dades en conjunts d'entrenament (67%) i de prova (33%)
+ECGN_train_data <- ECGN[train_index, ]
+ECGN_test_data <- ECGN[-train_index, ]
+
+# Columnes a excloure
+columns_to_exclude <- c("RECORD", "ECG_signal")
+train_data <- ECGN_train_data[, !(names(ECGN_train_data) %in% columns_to_exclude)]
+test_data <- ECGN_test_data[, !(names(ECGN_test_data) %in% columns_to_exclude)]
+
+# Guardem en variables els valors de l'identificador i de la variable a predir (class)
+train_IDs <- data.frame(Name = ECGN_train_data[, 0])
+test_IDs <- data.frame(Name = ECGN_test_data[, 0])
+
+# Guardem les etiquetes de classe a predir
+class_labels <- as.factor(ECGN$ECG_signal)
+train_class_labels <- as.factor(ECGN_train_data$ECG_signal)
+test_class_labels <- as.factor(ECGN_test_data$ECG_signal)
+
+# Mostrem les primeres files de les dades d'entrenament i de prova juntament amb les etiquetes de classe
+# head(train_data)
+head(train_class_labels)
+# head(test_data)
+head(test_class_labels)
+
+```
+
+# 3. Sección de aplicación de cada algoritmo para la clasificación. Está formado por subsecciones que corresponden a cada algoritmo y en este orden: 
+La implementación puede realizarse en R y/o Python. (Puntuación: 60%) En cada algoritmo hay que realizar las etapas mencionadas anteriormente y presentar una tabla de rendimiento de la calidad de la clasificación con al menos tres métricas para los opciones exploradas y un breve comentario.
+
+```{r calculate_metrics_function, cache=TRUE}
+# creem una funció per obtenir 4 mètriques per tots els models que explorarem
+calculate_metrics <- function(conf_matrix) {
+  accuracy <- sum(diag(conf_matrix)) / sum(conf_matrix)
+  precision <- diag(conf_matrix) / rowSums(conf_matrix)
+  recall <- diag(conf_matrix) / colSums(conf_matrix)
+  f1_score <- 2 * (precision * recall) / (precision + recall)
+
+  results <- data.frame(
+    Accuracy = accuracy,
+    Precision = precision,
+    Recall = recall,
+    F1_Score = f1_score
+  )
+  
+  return(results)
+}
+
+model_results <- list()
+
+```
+
+
+## • k-Nearest Neighbour. Se explorarán los valores para el número de vecinos k = 1, 3, 5, 7, 11.
+
+El k-NN, o k-Nearest Neighbors és un algorisme basat en el principi de què les instàncies de dades similars tendeixen a existir en proximitat espacial en l'espai de característiques, per tant, es pot predir una nova instància en funció de les seves veïnes més properes. En el cas de classificació, la classe més comuna entre les k veïnes determina la classe de la nova instància.
+
+Definim i avaluem el rendiment de l'algoritme kNN amb els valors de k indicats:
+
+```{r knn_algorithm, cache = TRUE}
+
+# Definim el vector amb els valors de k que volem provar
+k_values <- c(1, 3, 5, 7, 11)
+
+# Creem una llista per emmagatzemar els resultats dels diferents models KNN
+knn_algorithm <- list()
+
+# Per cada valor de K, realitzem la predicció i evaluació de les prediccions en una taula de contingència
+for (k_val in k_values) {
+  # definim el model
+  knn_pred <- knn(train = train_data, 
+                  test = test_data, 
+                  cl = train_class_labels, 
+                  k = k_val)
+  confusion_matrix <- confusionMatrix(data = as.factor(knn_pred), 
+                                      reference = as.factor(test_class_labels))
+  accuracy <- confusion_matrix$overall["Accuracy"]
+  cat("k =", k_val, "Accuracy =", accuracy, "\n")
+  cat("Confusion Matrix for k =", k_val, ":\n")
+  print(confusion_matrix)
+  knn_algorithm[[as.character(k_val)]] <- 
+    list(accuracy = accuracy,
+         confusion_matrix = confusion_matrix,
+         predictions = knn_pred)
+}
+
+```
+
+```{r knn_performance_metrics, cache = TRUE}
+
+# Llista per emmagatzemar els resultats dels diferents models KNN
+performance_metrics <- list()
+
+# Bucle per cada valor de k
+for (k_val in k_values) {
+  # Predicció utilitzant l'algoritme k-NN amb el valor actual de k
+  knn_pred <- knn(train = train_data, test = test_data, cl = train_class_labels, k = k_val)
+
+  # Creació de la matriu de confusió
+  confusion_matrix <- table(Actual = test_class_labels, Predicted = knn_pred)
+
+  # Càlcul de mètriques de rendiment (accuracy, precision, recall, f1_score)
+  accuracy <- sum(diag(confusion_matrix)) / sum(confusion_matrix)
+  precision <- diag(confusion_matrix) / rowSums(confusion_matrix)
+  recall <- diag(confusion_matrix) / colSums(confusion_matrix)
+  f1_score <- 2 * (precision * recall) / (precision + recall)
+
+  # Creació d'un dataframe amb els resultats
+  results <- data.frame(
+    K = k_val,
+    Accuracy = accuracy,
+    Precision = precision,
+    Recall = recall,
+    F1_Score = f1_score
+  )
+
+  performance_metrics[[as.character(k_val)]] <- results
+}
+
+results_knn <- do.call(rbind, performance_metrics)
+print(results_knn)
+
+```
+
+Com major és el valor de K, major és l'error de classificació. Tanmateix, per tots els valors de k analitzats, l'error de classificació és força mínim. També observem que les classes ARR i NSR tenen una major precisió independentment del valor de K que les altres dues classes AFF i CHF. Això no obstant, l'F1_Score sí que es veu més afectat com major és el valor de K.
+
+## • Naive Bayes. Se explorará la opción de activar o no laplace.
+
+L'algoritme de Naive Bayes descriu un mètode per aplicar el teorema de Bayes en problemes de classificació. Destaca per ser ràpid, sense gaire complexitat i gestionar correctament dades amb soroll i NAs. L'algoritme de Naive Bayes assumeix que totes les variables són igualment importants e independents, fet que el fa força versàtil.
+
+Quan diem d'activar laplace, ens referim a afegir un número petit en la taula de freqüències, de manera que cada variable mai té una probabilitat del 0%. Normalment s'activa amb un 1, fet que assegura que totes les combinacions entre classes i variables apareixen mínim una vegada.
+
+Per aplicar l'algoritme de Naive Bayes utilitzarem la funció NaiveBayes() del paquet e1071.
+
+```{r naive_bayes, cache = TRUE}
+# Definim el model sense activar laplace
+naiveBayes_m <- naiveBayes(train_data, train_class_labels, laplace = 0)
+
+# Realitzem les prediccions pel model sense activar laplace
+naiveBayes_pred <- predict(naiveBayes_m, test_data)
+CrossTable(naiveBayes_pred, test_class_labels, 
+           prop.chisq = FALSE, prop.t = FALSE, 
+           dnn = c('predicted', 'actual'))
+
+
+# creem les matrius de confusió i mètriques
+confusionMatrix(naiveBayes_pred, test_class_labels)
+confusion_matrix_naiveBayes <- table(Actual = test_class_labels, 
+                                     Predicted = naiveBayes_pred)
+
+results_naiveBayes <- calculate_metrics(confusion_matrix_naiveBayes)
+results_naiveBayes
+
+```
+
+```{r naive_bayes_lap, cache=TRUE}
+# Definim el model activant laplace = 1
+naiveBayesLap_m <- naiveBayes(train_data, train_class_labels, laplace = 1)
+
+# Realitzem les prediccións del model amb laplace activat
+naiveBayesLap_pred <- predict(naiveBayesLap_m, test_data)
+CrossTable(naiveBayesLap_pred, test_class_labels, 
+           prop.chisq = FALSE, prop.t = FALSE, 
+           dnn = c('predicted', 'actual'))
+
+
+confusionMatrix(naiveBayesLap_pred, test_class_labels)
+confusion_matrix_naiveBayesLap <- table(Actual = test_class_labels, 
+                                        Predicted = naiveBayesLap_pred)
+
+results_naiveBayesLap <- calculate_metrics(confusion_matrix_naiveBayesLap)
+results_naiveBayesLap
+```
+
+
+Si observem els resultats, veiem que activar laplace en aquest cas no altera els resultats del model i que els dos models obtenen els mateixos resultats.
+
+## • Artificial Neural Network. Se explorarán las arquitecturas con una y dos capas ocultas: 1) con 15 nodos en una capa oculta, 2) 25 y 10 nodos en cada capa oculta.
+
+L'algoritme de xarxa neuronal artificial, és un model computacional inspirat en un origen en l'estructura i el funcionament del sistema nerviós biològic. Es tracta en capes de nodes interconnectats sent l'estructura: capes d'entrada, capes ocultes i capes de sortida. Cada node té un pes associat que determina la força de la influència d'una neurona sobre l'altre. Durant l'entrenament del model, aquests pesos són ajustats.
+
+Per aplicar l'algoritme utilitzarem la funció neuralnet() del paquet homònim neuralnet.
+
+```{r, cache = TRUE}
+if (!require(neuralnet)) {
+  install.packages("neuralnet")
+  library(neuralnet)
+}
+
+# Per utilitzar la funció neuralnet, hem de combinar les variables predictores i la classe a predir en un mateix dataset, i convertir la classe a tipus numèric
+train_data_with_labels <- cbind(train_data, train_class_labels)
+test_data_with_labels <- cbind(test_data, test_class_labels)
+
+# DEFINICIO MODEL AMB NEURALNET() 15 NODOS EN UNA CAPA OCULTA
+# Definim el model amb una capa oculta de 15 nodes (hidden = 15)
+ann_m_15nodes <- neuralnet(
+  train_class_labels ~ .,
+  data = train_data_with_labels,
+  hidden = 15,
+  linear.output = FALSE
+)
+
+# visualitzem l'estructura de la xarxa neuronal del model definit amb una capa oculta de 15 nodes
+plot(ann_m_15nodes)
+
+
+test_data_with_labels$test_class_labels <- as.factor(test_data_with_labels$test_class_labels)
+
+test_data_with_labels$test_class_labels <- as.numeric(test_data_with_labels$test_class_labels)
+
+# Fem prediccions amb les dades de test
+model_results <- predict(ann_m_15nodes, test_data_with_labels[0:45]) 
+predicted_values <- as.matrix(model_results)
+predicted_classes <- apply(predicted_values, 1, which.max)
+
+# Calculem la correlació i mostrem la matriu de confusió
+cor(predicted_classes, test_data_with_labels$test_class_labels)
+confusionMatrix(table(predicted_classes, test_data_with_labels$test_class_labels))
+```
+
+Veiem que l'estructura de nodes és la correcta amb un node per cada variable, una capa oculta de 15 nodes i 4 nodes de sortida. Els nodes amb un 1 a la part superior són nodes de biaix, els quals són constants numèriques que permeten que el valor sigui desplaçat de manera similar a la intersecció en una equació lineal. Els valors numèrics són els pesos de cada connexió en la xarxa. En tractar-se d'un model amb una única capa oculta, el pes entre els nodes pot resultar similar als coeficients de regressió lineal.
+
+Realitzem el mateix pel model amb dues capes ocultes:
+
+```{r, cache = TRUE}
+# Definim el model amb dues capes ocultes
+ann_m_2510nodes <- neuralnet(
+  train_class_labels ~ .,
+  data = train_data_with_labels,
+  hidden = c(25, 10),
+  linear.output = TRUE
+)
+
+plot(ann_m_2510nodes) 
+
+test_data_with_labels$test_class_labels <- as.factor(test_data_with_labels$test_class_labels)
+
+test_data_with_labels$test_class_labels <- as.numeric(test_data_with_labels$test_class_labels)
+
+# Fem prediccions amb les dades de test
+model_results <- predict(ann_m_2510nodes, test_data_with_labels[0:45]) 
+
+predicted_values <- as.matrix(model_results)
+predicted_classes <- apply(predicted_values, 1, which.max)
+
+# Calculem la correlació i mostrem la matriu de confusió
+cor(predicted_classes, test_data_with_labels$test_class_labels)
+confusionMatrix(table(predicted_classes, test_data_with_labels$test_class_labels))
+
+```
+
+L'accuracy del segon model amb dues capes ocultes (96,21%) és menor que la del model amb una capa oculta (96,97%), tot i que ambdós resultats són molt elevats i en el cas d'algunes classes, la predicció a les dades de test és exacta. 
+
+
+## • Support Vector Machine. Se explorarán la funciones kernel lineal y rbf.
+
+Les Màquines de Suport Vectorial (SVM, per les seves sigles en anglès) són un tipus de model d'aprenentatge automàtic que es basen a identificar un hiperplà en l'espai de característiques que millor separi les instàncies de diferents classes. Una característica clau és la transformació de les dades originals en un espai de característiques de dimensions més altes. Aquest hiperplà és seleccionat de manera que la distància entre les instàncies més properes de les dues classes, anomenades vectors de suport, sigui màxima.
+
+Creem el model amb el kernel lineal utilitzant la funció ksvm() de la llibreria kernlab, realitzem les prediccions sobre les dades de prova test i mostrem els resultats.
+
+```{r linear_kernel_m, cache = TRUE}
+# Definim el model SVM lineal
+linear_svm_m <- ksvm(train_class_labels ~ ., 
+                     data = train_data, 
+                     kernel = "vanilladot",
+                     C = 0.01)  
+
+# Realitzem la predicció de les classes sobre les dades de prova (test)
+linear_svm_pred <- predict(linear_svm_m, test_data)
+
+# Imprimim la matriu de confusió
+confusionMatrix(linear_svm_pred, test_class_labels)
+confusion_matrix_linear_svm <- table(linear_svm_pred, test_class_labels)
+
+# Evaluem la precisió del model
+metrics_linear_svm <- calculate_metrics(confusion_matrix_linear_svm)
+print("Mètriques per al model SVM lineal:")
+print(metrics_linear_svm)
+
+```
+
+La matriu de confusió obtinguda en avaluar el model revela un rendiment general força alt, amb una accuracy del 91.16%. Si observem les altes sensibilitats i especificitats per a cada classe, s'evidencia una bona capacitat del model de distinció entre les classes. Les classes ARR i NSR són predites al 100%, amb una sensibilitat i especificitat del 100%. Això no obstant, les variables AFF i CHF tenen una sensibilitat i especificitat menor.
+
+A continuació definirem un segon model SVM lineal ajustant alguns hiperparàmetres i aplicant la validació creuada.
+
+```{r linear_svm_adj, cache = TRUE}
+# Creem i entrenem el model SVM lineal amb el millor C
+linear_svm_mcar <- train(x = train_data,
+                          y = train_class_labels,
+                          method = "svmLinear",
+                          trControl = trainControl(method = "cv", number = 3)
+                          )
+
+# Realitzem la predicció de les classes sobre les dades de prova (test)
+linear_svm_mcar_pred <- predict(linear_svm_mcar, test_data)
+
+# Imprimim la matriu de confusió i valors estadístics del model
+confusionMatrix(linear_svm_mcar_pred, test_class_labels)
+confusion_matrix_lin_svm_adj <- table(linear_svm_mcar_pred, test_class_labels)
+
+# Evaluem la precisió del model
+metrics_linear_svm_adj <- calculate_metrics(confusion_matrix_lin_svm_adj)
+print("Mètriques per al model SVM lineal ajustat:")
+print(metrics_linear_svm_adj)
+```
+
+El model SVM lineal amb crossvalidation mostra una major precisió global en comparació amb el model anterior, indicant una major capacitat de classificació. A més, el valor de Kappa també és superior, indicant una major concordança entre les prediccions del model i les observacions reals. Si observem les estadístiques per cada classe, la classe CHF mostra una important millora en la seva capacitat de predicció.
+
+A continuació definim el model amb kernel RBF.
+
+```{r rbf_kernel_svm, cache = TRUE}
+# Creem i entrenem el model SVM amb kernel RBF
+rbf_svm_m <- ksvm(train_class_labels ~ ., 
+                      data = train_data, 
+                      kernel = "rbfdot")  
+
+# Realitzem la predicció de les classes sobre les dades de prova (test)
+rbf_svm_pred <- predict(rbf_svm_m, test_data)
+
+# Imprimim la matriu de confusió i valors estadístics del model
+confusionMatrix(rbf_svm_pred, test_class_labels)
+confusion_matrix_rbf_svm <- table(rbf_svm_pred, test_class_labels)
+
+# Evaluem la precisió del model
+metrics_rbf_svm <- calculate_metrics(confusion_matrix_rbf_svm)
+print("Mètriques per al model SVM amb kernel RBF:")
+print(metrics_rbf_svm)
+```
+
+L'algoritme SVM amb kernel RBF mostra  una accuracy força similar al model SVM lineal amb validació creuada. Tanmateix, el model RBF presenta un bon equilibri entre sensibilitat i especificitat per a totes les classes, la qual cosa suggereix la seva capacitat per a identificar tant instàncies positives com negatives de manera efectiva. 
+
+A continuació realitzarem una cerca dels hiperparàmetres més adients per l'algoritme SVM RBF:
+```{r rbf_svm_adj, cache = TRUE}
+# Definim l'abast d'hiperparàmetres a explorar
+hyperparameters <- expand.grid(.sigma = seq(0.005, 0.5, by = 0.05),
+                               .C = seq(0.1, 2, by = 0.2))
+
+# Entrenem el model SVM amb kernel RBF amb els diferents hiperparàmetres definits utilitzant caret
+rbf_svm_grid <- train(x = train_data,
+                       y = train_class_labels,
+                       method = "svmRadial",
+                       tuneGrid = hyperparameters)
+
+# Imprimim i guardem els resultats
+print(rbf_svm_grid)
+grid_results <- rbf_svm_grid$results
+grid_results
+
+# Seleccionem la fila amb la major precisió i guardem els seus valors de sigma i C 
+best_row <- grid_results[which.max(grid_results$Accuracy), ]
+best_sigma <- best_row$sigma
+best_C <- best_row$C
+
+# Entrena el model SVM amb kernel RBF i els valors més òptims de sigma i C
+best_rbf_svm <- train(x = train_data,
+                    y = train_class_labels,
+                    method = "svmRadial",
+                    tuneGrid = data.frame(.sigma = best_sigma, .C = best_C))
+
+# Realitzem la predicció de les classes sobre les dades de prova (test)
+rbf_svm_mcar_pred <- predict(best_rbf_svm, test_data)
+
+# Imprimim la matriu de confusió i valors estadístics del model
+confusionMatrix(rbf_svm_mcar_pred, test_class_labels)
+confusion_matrix_rbf_svm_adj <- table(rbf_svm_mcar_pred, test_class_labels)
+
+# Evaluem la precisió del model
+metrics_rbf_svm_adj <- calculate_metrics(confusion_matrix_rbf_svm_adj)
+print("Mètriques per al model SVM amb kernel RBF ajustat:")
+print(metrics_rbf_svm_adj)
+```
+
+La combinació d'hiperparàmetres amb majors resultats és sigma = 0.055 i c = 1.9. Els resultats del model mostren una bona capacitat global de predicció de les classes, amb valors força alts d'accuracy, sensibilitat i especificitat. En comparació amb els models SVM previs, tant RBF com lineals, la capacitat de classificació del model ha millorat significativament. 
+
+
+## • Árbol de Clasificación. Se explorará la opción de activar o no boosting.
+
+Els arbres de classificació són un tipus de model dintre dels mètodes d'arbres. Aquests es basen les estructures d'arbre en què de manera recursiva es divideix el conjunt de dades en subconjunts més petits, representant cada node intern una característica o atribut, cada branca els possibles valors i cada fulla les etiquetes de classificació. Aquest mètode pot tendir a ser sensible davant de petites variacions en les dades i tendir al sobre ajustament, fet que es pot millorar amb tècniques com l'augment del gradient (Gradient Boosting) o la combinació de múltiples arbres com veurem en el model RandomForest.
+
+El boosting és una tècnica emprada per millorar la precisió del model i la seva capacitat de generalitzar davant de dades noves. Si el boosting està activat, el model entrena múltiples arbres de decisió en seqüència amb un procés addicional de correcció d'errors, en canvi, si el desactivem, només entrena un arbre de decisió. A continuació explorarem ambdues opcions:
+
+```{r cltree, cache = TRUE}
+
+# Definim el model utilitzant la funció C5.0 amb el boosting desactivat
+c50_model_no_boost <- C5.0(train_data, 
+                           as.factor(train_class_labels), 
+                           trials = 1)
+
+# Realitzem les prediccions
+c50_pred_no_boost <- predict(c50_model_no_boost, test_data)
+
+# Generem la matriu de confusió
+confusionMatrix(c50_pred_no_boost, test_class_labels)
+confusion_matrix_c50_no_boost <- table(c50_pred_no_boost, test_class_labels)
+
+# Evaluem la precisió del model
+metrics_c50_no_boost <- calculate_metrics(confusion_matrix_c50_no_boost)
+print("Mètriques per al model sense augment (boosting):")
+print(metrics_c50_no_boost)
+
+
+```
+
+El model sense boosting mostra un rendiment força elevat amb una precisió global del 95,2%. 
+
+```{r boost_cltree, cache = TRUE}
+# Definim el model utilitzant la funció C5.0 amb el boosting activat
+c50_model_boost <- C5.0(train_data, as.factor(train_class_labels), trials = 10)
+
+# Realitzem les prediccions
+c50_pred_boost <- predict(c50_model_boost, test_data)
+
+# Generem la matriu de confusió
+confusionMatrix(c50_pred_boost, test_class_labels)
+confusion_matrix_c50_boost <- table(c50_pred_boost, test_class_labels)
+
+# Evaluem la precisió del model
+metrics_c50_boost <- calculate_metrics(confusion_matrix_c50_boost)
+print("Mètriques per al model amb augment (boosting):")
+print(metrics_c50_boost)
+
+```
+
+Amb l'ús del boosting, el model experimenta una millora lleu, amb una precisió global del 96.72%. Ambdós models obtenen bons resultats de classificació, sobretot per les classes AFF, ARR i NSR. L'algoritme d'arbre de classificació amb boosting aconsegueix millors resultats que el mateix sense activar el boosting, especialment per la classe CHF, la qual obté un millor rendiment amb el boosting activat.
+
+## • Random Forest. Se explorará la opción de número de árboles n = 100, 200.
+
+El Bosc Aleatori (Random Forest) és un algorisme pertanyent a la família d'ensamblatge d'arbres de decisió. Utilitza una col·lecció d'arbres de decisió, on cada arbre és entrenat amb una mostra aleatòria de les dades d'entrenament i aquests arbres de decisió serveixen com a "aprenents" individuals. La combinació de múltiples arbres entrenats en mostres aleatòries redueix la tendència al sobre ajustament. Cada arbre pot sobre ajustar-se als detalls particulars de les dades, però la combinació d'arbres atenua aquest efecte. En la fase de predicció, les sortides de cada arbre es combinen mitjançant una votació majoritària per a problemes de classificació o una mitjana per a problemes de regressió.
+
+```{r 100_trees, cache = TRUE}
+# Definim el model de Random Forest amb 100 arbres
+rf_model_100trees <- randomForest(train_class_labels ~ ., 
+                                  data = train_data, 
+                                  ntree = 100)
+
+# Realitzem les predicciones
+rf_pred_100trees <- predict(rf_model_100trees, test_data)
+
+# Generem la matriu de confusió
+confusionMatrix(rf_pred_100trees, test_class_labels)
+confusion_matrix_rf_100trees <- table(rf_pred_100trees, test_class_labels)
+
+# Evaluem la precisió del model
+metrics_rf_100trees <- calculate_metrics(confusion_matrix_rf_100trees)
+print("Mètriques per al model Random Forest amb 100 arbres:")
+print(metrics_rf_100trees)
+
+```
+
+El model Random Forest amb 100 arbres presenta un rendiment excepcional amb una precisió global del 97,7%. 
+
+```{r 200_trees, cache = TRUE}
+# Definim el model de Random Forest amb 200 arbres
+rf_model_200trees <- randomForest(train_class_labels ~ ., 
+                                  data = train_data, 
+                                  ntree = 200)
+
+# Realitzem les predicciones
+rf_pred_200trees <- predict(rf_model_200trees, test_data)
+
+# Generem la matriu de confusió
+confusionMatrix(rf_pred_200trees, test_class_labels)
+confusion_matrix_rf_200trees <- table(rf_pred_200trees, test_class_labels)
+
+# Evaluem la precisió del model
+metrics_rf_200trees <- calculate_metrics(confusion_matrix_rf_200trees)
+print("Mètriques per al model Random Forest amb 200 arbres:")
+print(metrics_rf_200trees)
+```
+
+Ambdós models obtenen molt bons resultats de classificació. El model Random Forest amb 200 arbres millora lleugerament els resultats respecte al model amb 100 arbres, amb una precisió global del 98.23% i suggerint que incrementar el nombre d'arbres en el model continua millorant lleugerament la seva capacitat predictiva.
+
+# 4. Sección de conclusión y discusión sobre el rendimiento de los algoritmos con al menos tres métricas para el problema tratado. Proponer que modelo o modelos son los mejores. (Puntuación: 20%)
+
+En general, tots els models han obtingut bons resultats, tanmateix, l'algoritme que millors resultats ha obtingut en general és el RandomForest.
+
+En contraposició, el model que menys rendiment ha assolit ha sigut el de NaiveBayes, amb una accuracy del 85,35%. En aquest cas, activar o no activar laplace no ha alterat el rendiment i s'han aconseguit els mateixos resultats en ambdós models.
+
+A a continuació, el model kNN ha obtingut una precisió del 97,22% amb k = 1; 95,45% amb k = 3; 93,93% amb k = 5; 94,19% amb k = 7 i 92,67% amb k = 11. Tot i que k=1 ha assolit millors resultats que els altres valors de K, tanmateix, el valor de k = 1 tendeix al sobre ajustament i és millor evitar-lo. Els valors de K=3, K=5 i k=7 podrien ser les opcions amb major rendiment dels models kNN, ja que mantenen un rendiment sòlid i són menys propenses al sobre ajustament que k=1. Per tant, tot i que augmentar el valor de k redueixi l'accuracy, s'ha de trobar un equilibri entre l'accuracy i evitar el sobre ajustament per ser capaç el model de generalitzar millor davant de dades noves.
+
+En els models amb els algoritmes SVM, ajustar els hiperparàmetres ha donat millors resultats que els mateixos sense ajustar. Amb el kernel lineal, sense ajustar els hiperparàmetres, hem obtingut una accuracy del 91,16%. En canvi, aplicant la validació creuada amb cv = 3 al kernel lineal el rendiment augmenta aconseguint una accuracy del 95,70%. El model SVM amb kernel RBF de base aconsegueix una accuracy del 95,20% i si explorem diferents hiperparàmetres, amb sigma = 0,055 i c = 1,9, el rendiment augmenta fins a una accuracy del 96,46%.
+
+El model amb l'algoritme ANN també ha obtingut bons resultats amb un rendiment del 96,97% amb una capa oculta de 15 nodes i un rendiment del 96,21% pel model amb dues capes ocultes de 25 i 10 nodes. En aquest cas, tot i que normalment augmentar les capes, sobretot d'una a dues, pot incrementar el rendiment, en aquest cas s'ha mantingut i fins i tot ha baixat unes dècimes. Els algoritmes ANN i SVM han sigut els dos que més cost computacional han tingut i aquest es podria mirar de millorar i fer més eficient explorant altres solucions més complexes. 
+
+El model d'arbre de classificació ha performat correctament, amb un 95,20% sense booosting i una millora del mateix model amb una l'accuracy del 96,71% amb boosting activat. 
+
+Finalment, el model que millors resultats ha obtingut és el Random Forest. Amb 100 arbres ha assolit una accuracy del 97,97% i amb 200 arbres ha baixat unes dècimes al 97,72%. Tanmateix, és el model que de base millors resultats ha aconseguit i amb un cost computacional força baix. No obstant això, seria interessant investigar maneres de millorar la performance dels models, i alguns models, modificant i ajustant-los, podrien millorar el seu rendiment.
+
+També s'ha observat que no totes les classes obtenen els mateixos resultats, i hi ha hagut models que alguna de les classes ha tingut errors de classificació més elevats que d'altres classes. Per tant, a l'hora de diagnosticar o infradiagnosticar aquesta classe amb un pitjor rendiment, s'ha de tenir en compte el possible error i fer una valoració més extensiva.
+
+En general, els resultats per tots els models provats han sigut bons, però aconseguir valors tan elevats d'accuracy no acostuma a ser l'habitual. I com més complex és el conjunt de dades més difícil és aconseguir bons rendiments capaços de generalitzar correctament davant de noves dades.
+
+
+
