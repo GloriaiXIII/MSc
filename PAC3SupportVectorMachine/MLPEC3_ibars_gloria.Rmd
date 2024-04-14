@@ -1,0 +1,451 @@
+---
+title: "Seqüències promotores en E. Coli"
+author: "Glòria Ibars"
+date: '`r format(Sys.Date(),"%e de %B, %Y")`'
+output:
+  html_document:
+    toc: yes
+    toc_depth: 2
+    toc_float: yes
+  pdf_document:
+    toc: yes
+    toc_depth: 2
+---
+
+```{r setup, include=FALSE}
+# knitr options
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r libraries, include=FALSE}
+
+#Instal·lem i llegim les llibreries necessàries
+
+if (!require(knitr)) {
+    install.packages("knitr")
+    library(knitr)
+}
+
+if (!require(tidyr)) {
+    install.packages("tidyr")
+    library(tidyr)
+}
+
+if (!require(pROC)) {
+    install.packages("pROC")
+    library(pROC)
+}
+
+if (!require(caret)) {
+    install.packages("caret")
+    library(caret)
+}
+
+if (!require(kernlab)) {
+    install.packages("kernlab")
+    library(kernlab)
+}
+
+if (!require(ggplot2)) {
+    install.packages("ggplot2")
+    library(ggplot2)
+}
+
+if (!require(htmlTable)) {
+    install.packages("htmlTable")
+    library(htmlTable)
+}
+
+```
+
+
+Los promotores son secuencias de ADN que afectan la frecuencia y ubicación del inicio de la transcripción a través de la interacción con la ARN polimerasa.
+
+Este estudio se basa en los ficheros obtenidos de:
+
+Dua, D. and Graff, C. (2019). UCI Machine Learning Repository [http://archive.ics.uci.edu/ml]. Irvine, CA: University of California, School of Information and Computer Science.
+
+Para más información, se puede recurrir a la siguiente referencia acerca del estudio de promotores en E.Coli: Harley, C. and Reynolds, R. 1987. “Analysis of E. Coli Promoter Sequences.” Nucleic Acids Research, 15:2343-2361
+
+Los atributos del fichero de datos son:
+1. Un símbolo de {+/-}, indicando la clase (“+” = promotor).
+2. El nombre de la secuencia promotora. Las instancias que corresponden a no promotores se denominan por la posición genómica.
+3. Las restantes 57 posiciones corresponden a la secuencia.
+
+La manera elegida para representar los datos es un paso crucial en los algoritmos de clasificación. En el caso que nos ocupa, análisis basados en secuencias, se usará la transformación denominada one-hot encoding.
+
+El one-hot encoding representa cada nucleótido por un vector de 4 componentes, con 3 de ellas a 0 y una a 1 indicando el nucleótido. Pongamos por ejemplo, el nucleótido T se representa por (1,0,0,0), el nucleótido C por (0,1,0,0), el nucleótido G por (0,0,1,0) y el nucleótido A por (0,0,0,1).
+
+Por tanto, para una secuencia de 57 nucleótidos, como en nuestro caso, se obtendrá un vector de 4*57=228 componentes, resultado de concatenar los vectores para cada uno de los 57 nucleótidos.
+
+Una vez realizada la transformación, one-hot encoding el objetivo se trata de predecir con SVM si la secuencia es un promotor o no, y comparar sus rendimientos.
+
+# 1. Escribir en el informe una sección con el título: “Algoritmo Support Vector Machine” en el que se haga una breve explicación de su funcionamiento y sus características y, además, se presente una tabla de sus fortaleza y debilidades.
+
+L'algorisme SVM (Support Vector Machine) és un algorisme d'aprenentatge supervisat utilitzat en tasques de classificació i regressió (predicció numèrica). SVM forma part dels coneguts com a processos d'algorismes de caixa negra (black box algorithms), és a dir, algorismes el funcionament intern dels quals queda amagat sota una gran complexitat matemàtica que dificulta la transparència i comprensió del perquè dels resultats obtinguts. Aquest factor ètic s'ha de tenir en compte a l'hora de prendre decisions a partir del model construït.
+
+Malgrat la seva complexitat, actualment es poden aplicar fàcilment a través de l'ús de llibreries. Les més destacades són:
+- e1071 del departament de tecnologia de la TU Viena
+- klar del departament d'estadística de la TU Dortmund
+- kernlab  
+
+Un model SVM busca dins d'un conjunt de dades/punts la creació d'un hiperpla que separi les classes amb el marge més ampli possible entre elles. Aquest hiperpla es pot visualitzar en un espai 2D com una línia o en un espai 3D com una superfície plana que divideix l'espai. Per seleccionar l'hiperpla més òptim, el model selecciona aquell amb un major marge de l'hiperpla MMH (Maximum margin hyperplane). El marge de l'hiperpla és la distància entre l'hiperpla i les dades de cada classe que limiten amb el marge MMH, conegudes aquestes dades limitants com a vectors de suport (support vectors). L'hiperpla amb un major marge entre categories serà probablement el que millor generalitzi davant de noves dades i es veurà menys afectat pel possible soroll en les dades.
+
+En el cas de categories no separables linealment, s'utilitza una variable slack que permet que alguns valors es categoritzin en la categoria incorrecta. Això es coneix com el cost o valor C (cost value). Com més gran és el valor de C, més es focalitza el model a reduir l'error d'entrenament, però això pot conduir al sobreajustament. Mentre que com menor és el valor de C, més ample és el marge d'optimització, però el model pot tendir al subajustament. S'ha d'ajustar el valor de C per trobar un equilibri entre un error d'entrenament baix i permetre classificacions errònies.
+
+Una altra característica destacable en els models SVM amb dades no lineals és l'ús de kernels. Mitjançant el "kernel trick", el model mapeja les dades en més de dues dimensions, tenint en compte diferents perspectives que, en el cas de representar únicament les dades en 2D, poden no ser percebudes. Els kernels més comuns són el kernel lineal, el polinòmic, el sigmoide i el RBF.
+
+```{r table }
+
+table <- data.frame(
+  "Fortalesses" = c(
+    "- Eficient en espais d'alta dimensió i en conjunts de dades amb relacions no lineals",
+    "- Fàcil d'implementar a través de l'ús de paquets i gran capacitat d'obtenció de bons resultats d'accuracy",
+    "- Pot ser utilitzat tant en problemes de classificació com de regressió"
+  ),
+  "Debilitats" = c(
+    "- Model de caixa negra: dificultats i complexitat per interpretar i justificar els resultats",
+    "- Complexitat i gran cost computacional",
+    "- Cost de temps en experimenar amb els paràmetres per obtenir el kernel més eficient"
+  )
+)
+
+htmlTable(table, rnames = FALSE)
+
+```
+
+
+# 2. Implementar una función para realizar una transformación one-hot encoding de las secuencias del fichero de datos promoters.txt. En caso de no lograr la implementación de dicha transformación, se puede utilizar el fichero promoters_onehot.txt con las secuencias codificados según una codificación one-hot para completar la actividad.
+
+Implementem una funció principal amb una funció interna per tal d'aplicar la transformació one-hot encoding. Per aplicar la codificació, hem d'emprar la funció principal apply_one_hot_encoding amb els arguments següents:
+- data = un df amb les seqüències a codificar. El df ha de tenir les segÜents columnes: index, seqname, class i la columna amb la seqüència. 
+- sequence_column = el nom de la columna que conté les seqüències de nucleòtids que es volen codificar
+- nucleotide_symbols = els nucleòtids per les seves lletres. Per defecte A, G, C i T
+- one_hot_matrix = una matriu amb la codificació per cada nucleòtid del paràmetre nucleotide_symbols. Per defecte, A=[0,0,0,1], G=[0,0,1,0], C=[0,1,0,0] i T=[1,0,0,0].
+
+Els paràmetres sequence_column, nucleotide_symbols i one_hot_matrix permeten que la funció sigui flexible i adaptable a noves definicions d'aquests. 
+
+```{r onehotencoding}
+# Definim la funció per aplicar la codificació one-hot encoding a un data frame
+apply_one_hot_encoding <- function(data, sequence_column, 
+                                   nucleotide_symbols = c("A", "G", "C", "T"), 
+                                   one_hot_matrix = matrix(c(0, 0, 0, 1,   # A
+                                                             0, 0, 1, 0,   # G
+                                                             0, 1, 0, 0,   # C
+                                                             1, 0, 0, 0),  # T
+                                                           nrow = 4, byrow = TRUE)) {
+  # Definim la funció per realitzar la codificació one-hot encoding
+  one_hot_encode <- function(sequence) {
+    # Convertim la seqüència a majúscules per unificar i coincidir amb els nucleòtids
+    sequence <- toupper(sequence)
+
+    # Inicialitzem una matriu de zeros per emmagatzemar la codificació one-hot
+    encoding_matrix <- matrix(0, nrow = nchar(sequence), ncol = ncol(one_hot_matrix))
+
+    # Omplim la matriu amb els valors corresponents als nucleòtids de la seqüència
+    for (i in seq_len(nchar(sequence))) {
+      nucleotide <- substr(sequence, i, i)
+      encoding_matrix[i, ] <- one_hot_matrix[nucleotide == nucleotide_symbols, ]
+    }
+
+    # Retornem la matriu unidimensional resultant
+    return(as.vector(t(encoding_matrix)))
+  }
+
+  # Apliquem la codificació one-hot a la columna de seqüència especificada
+  one_hot_encoded <- t(sapply(data[[sequence_column]], one_hot_encode))
+
+  # Concatenem els resultats codificats amb el data frame original
+  df_encoded <- cbind(data[, c("class", "seqname", "index")], one_hot_encoded)
+
+  # Renombrem les columnes començant des de "V1"
+  colnames(df_encoded) <- c(names(data)[names(data) %in% c("class", "seqname", "index")], 
+                            paste0("V", seq_len(ncol(one_hot_encoded))))
+
+  # Retornem el dataframe final amb la seqüència codificada 
+  return(df_encoded)
+}
+
+```
+
+
+# 3. Desarrollar un código en R (o en Python) que implemente un clasificador de SVM. El código debe:
+
+## (a) Leer y codificar los datos con la función one-hot desarrollada.
+
+```{r read}
+
+#C:/Users/glori/Documents/MSc/MachineLearning/machinelearningpec3/promoters.txt
+
+# Carreguem les dades promoters.txt, modifiquem el nom de les columnes i afegim un index
+promoters <- read.table("./promoters.txt", header = FALSE, sep = ",", stringsAsFactors = FALSE)
+colnames(promoters) <- c("class", "seqname", "sequence") 
+promoters$index <- seq_len(nrow(promoters))
+
+# Apliquem la funció apply_one_hot_encoding per codificar la columna amb la seqüència amb els paràmetres preestablerts de codificació dels nucleòtids
+promoters_encoded <- apply_one_hot_encoding(promoters, "sequence")
+
+# Mostrem les primeres files del df codificat per verificar la transformació
+head(promoters_encoded)
+
+# Imprimim la primera seqüència codificada
+values <- as.vector(unlist(promoters_encoded[1, -(1:3)]))
+cat(values, sep = " ")
+
+```
+
+## (b) Utilizando la semilla aleatoria 12345, separar los datos en dos partes, una parte para training (67%) y una parte para test (33%).
+
+```{r}
+# Verifiquem si la columna 'class' no és de tipus factor i si no és factor, la convertim a factor
+if (!is.factor(promoters_encoded$class)) {
+  promoters_encoded$class <- as.factor(promoters_encoded$class)
+}
+
+```
+
+
+```{r split_train_test}
+
+# Establim la llavor aleatòria 12345 per garantir la reproductibilitat
+set.seed(12345)
+# Definim la proporció de dades d'entrenament train
+train_proportion <- 0.67
+
+# Creem un índex amb les files d'entrenament
+train_index <- sample(1:nrow(promoters_encoded), nrow(promoters_encoded) * train_proportion)
+
+# Separem les dades en conjunts d'entrenament (67%) i de prova (33%)
+train_data <- promoters_encoded[train_index, ]
+test_data <- promoters_encoded[-train_index, ]
+
+# Guardem en variables els valors de l'identificador i de la variable a predir (class)
+#train_data_name <- train_data[, 2]
+#test_data_name <- test_data[, 2]
+
+train_seqnames <- data.frame(Name = train_data[, 2])
+test_seqnames <- data.frame(Name = test_data[, 2])
+
+train_all_non_num <- data.frame(class = train_data[, c(1,2,3)])
+test_all_non_num <- data.frame(class = test_data[, c(1,2,3)])
+
+# Guardem les etiquetes de classe a predir
+# train_class <- data.frame(class = train_data[, 1])
+# test_class <- data.frame(class = test_data[, 1])
+class_labels <- promoters$class
+train_class_labels <- train_data[, 1]
+test_class_labels <- test_data[, 1]
+
+
+# Excloem de la matriu els valors de l'identificador i de la variable a predir (class)
+train_data <- train_data[, -c(1, 2, 3)]
+test_data <- test_data[, -c(1, 2, 3)]
+
+# Mostrem les primeres files de les dades d'entrenament i de prova juntament amb les etiquetes de classe
+#head(train_data)
+head(train_class_labels)
+#head(test_data)
+head(test_class_labels)
+
+```
+
+
+## (c) Utilizar el kernel lineal y el kernel RBF para crear sendos modelos SVM basados en el training para predecir las clases en los datos del test.
+
+Creem el model amb el kernel lineal utilitzant la funció ksv() de la llibreria kernlab, realitzem les prediccions sobre les dades de prova test i mostrem els resultats.
+
+```{r linear_kernel_m}
+# Entrenem el model SVM lineal
+linear_svm_m <- ksvm(train_class_labels ~ ., 
+                         data = train_data, 
+                         kernel = "vanilladot")
+
+
+# Realitzem la predicció de les classes sobre les dades de prova (test)
+linear_svm_pred <- predict(linear_svm_m, test_data)
+
+# Imprimim la matriu de confusió i valors estadístics del model
+#print(table(linear_svm_pred, test_class_labels))
+confusionMatrix(linear_svm_pred, test_class_labels)
+```
+
+```{r rbf_kernel_m}
+# Creem i entrenem el model SVM amb kernel RBF
+rbf_svm_m <- ksvm(train_class_labels ~ ., 
+                      data = train_data, 
+                      kernel = "rbfdot")  
+
+# Realitzem la predicció de les classes sobre les dades de prova (test)
+rbf_svm_pred <- predict(rbf_svm_m, test_data)
+
+# Imprimim la matriu de confusió i valors estadístics del model
+confusionMatrix(rbf_svm_pred, test_class_labels)
+
+```
+
+
+## (d) Usar el paquete caret con el modelo svmLinear para implementar un SVM con kernel lineal y 3-fold crossvalidation. Comentar los resultados.
+
+Per crear un model SVM amb la llibreria caret, utilitzem la funció train() especificant el tipus de model en el paràmetre del mètode en comptes d'utilitzant la funció ksvm() de kernlab com hem fet prèviament. 
+
+```{r linear_svm_mcar_m}
+
+# Definim el control d'entrenament amb validació creuada 3-fold crossvalidation
+#ctrl <- trainControl(method = "cv", number = 3)
+
+# Creem i entrenem el model SVM lineal amb el millor C
+linear_svm_mcar <- train(x = train_data,
+                          y = train_class_labels,
+                          method = "svmLinear",
+                          trControl = trainControl(method = "cv", number = 3)
+                          )
+
+
+# Realitzem la predicció de les classes sobre les dades de prova (test)
+linear_svm_mcar_pred <- predict(linear_svm_mcar, test_data)
+
+# Imprimim la matriu de confusió i valors estadístics del model
+confusionMatrix(linear_svm_mcar_pred, test_class_labels)
+
+
+```
+
+En general, l'accuracy indica un rendiment força bo del model, sent capaç de classificar correctament el 85.71% de les dades de prova (Test). Si observem la matriu de confusió, 13 instàncies de la classe + van ser correctament classificades (TP); 2 instàncies de la classe - van ser incorrectament classificades com a + (FP); 17 instàncies de la classe - van ser correctament classificades com a - (TN) i 3 instàncies de la classe + van ser incorrectament classificades com a - (FN). 
+
+Si analitzem les estadístiques, l'interval de confiança del 95% per a la precisió global indica que el veritable rendiment del model té una probabilitat compresa entre el 69.74% i el 95.19%. 
+
+En comparació amb el model SVM amb kernel lineal previ, el resultat no varia tot i haver afegit la validació creuada. 
+
+
+
+## (e) Evaluar el rendimiento del algoritmo SVM con kernel RBF para diferentes valores de los hiperparámetros C y sigma. Orientativamente, se propone explorar valores de sigma en el intervalo (0.005,0.5) y valores de C en el intervalo (0.1, 2). Una manera fácil de hacerlo es utilizar el paquete caret con el modelo svmRadial. Mostrar un gráfico del rendimiento según los valores de los hiperparámetros explorados. Comentar los resultados.
+
+```{r best_rbf_svm_m}
+# Definim l'abast d'hiperparàmetres a explorar
+hyperparameters <- expand.grid(.sigma = seq(0.005, 0.5, by = 0.05),
+                               .C = seq(0.1, 2, by = 0.2))
+
+# Entrenem el model SVM amb kernel RBF amb els diferents hiperparàmetres definits utilitzant caret
+rbf_svm_grid <- train(x = train_data,
+                       y = train_class_labels,
+                       method = "svmRadial",
+                       tuneGrid = hyperparameters)
+
+# Imprimim i guardem els resultats
+print(rbf_svm_grid)
+grid_results <- rbf_svm_grid$results
+grid_results
+
+# Seleccionem la fila amb la major precisió i guardem els seus valors de sigma i C 
+best_row <- grid_results[which.max(grid_results$Accuracy), ]
+best_sigma <- best_row$sigma
+best_C <- best_row$C
+
+# Entrena el model SVM amb kernel RBF i els valors més òptims de sigma i C
+best_rbf_svm <- train(x = train_data,
+                    y = train_class_labels,
+                    method = "svmRadial",
+                    tuneGrid = data.frame(.sigma = best_sigma, .C = best_C))
+
+# Realitzem la predicció de les classes sobre les dades de prova (test)
+rbf_svm_mcar_pred <- predict(best_rbf_svm, test_data)
+
+# Imprimim la matriu de confusió i valors estadístics del model
+confusionMatrix(rbf_svm_mcar_pred, test_class_labels)
+#caret::confusionMatrix(table(rbf_svm_mcar_pred, test_class_labels))
+
+```
+
+```{r heatmap}
+# Dibuixem el rendiment amb un mapa de calor
+ggplot(grid_results, aes(x = sigma, y = factor(C), fill = Accuracy)) +
+  geom_tile() +
+  scale_fill_gradient(low = "white", high = "blue") +
+  labs(title = "Performance Heatmap",
+       x = "Sigma",
+       y = "C",
+       fill = "Accuracy") +
+  theme_minimal() +
+  theme(axis.text.y = element_text(angle = 0, hjust = 1))
+
+```
+
+A través del mapa de calor podem representar el rendiment del model SVM amb kernel RBF pels diferents valors de sigma i C explorats. La intensitat del color reflecteix la precisió, proporcionant una visualització dels hiperparàmetres amb millor rendiment. 
+
+En aquest cas, veiem que l'accuracy més alta l'obtenen els models amb una sigma menor i un valor de C major. Un valor de C superior a 0.5 o 1.0 permet flexibilitzar en la classificació dels valors i un valor de sigma menor a 0.05 indica l'ús de kernels gaussians estrets. Aquest mapa de calor concorda amb el resultat assolit en l'exploració dels millors hiperparàmetres, on la combinació amb millor resultat ha sigut sigma = 0.005 i c = 1.3.
+
+No obstant això, és interessant veure que el rendiment no millora de manera uniforme amb l'augment de sigma o C. Per exemple, en alguns casos, en augmentar sigma resulta en una millora significativa de l'accuracy fins a certs punts, però més enllà d'aquests punts, l'accuracy deixa de créixer i fins i tot disminueix. Això indica que hi ha un punt òptim per a sigma més baix que proporciona millors resultats.
+
+Tot i que si comparem aquest model amb el model SVM amb kernel RBF anterior, la cerca d'hiperparàmetres en aquest cas no ha suposat una millora als hiperparàmetres estàndard. Tanmateix, la selecció òptima dels hiperparàmetres pot tenir un impacte significatiu en el rendiment del model i, per tant, és crucial realitzar aquesta exploració.
+
+
+## (f) Crear una tabla resumen de los diferentes modelos y sus rendimientos. Comentar y comparar los resultados de la clasificación en función de los valores generales de la clasificación como accuracy y otros para los diferentes clasificadores obtenidos. ¿Qué modelo resulta ser el mejor?
+
+```{r summary}
+
+# Linear SVM
+linear_svm_acc <- mean(linear_svm_pred == test_class_labels)
+linear_svm_conf_matrix <- table(Actual = test_class_labels, Predicted = linear_svm_pred)
+linear_svm_precision <- linear_svm_conf_matrix[2, 2] / sum(linear_svm_conf_matrix[, 2])
+linear_svm_recall <- linear_svm_conf_matrix[2, 2] / sum(linear_svm_conf_matrix[2, ])
+linear_svm_f1_score <- 2 * (linear_svm_precision * linear_svm_recall) / (linear_svm_precision + linear_svm_recall)
+linear_svm_roc_curve <- roc(test_class_labels, as.numeric(linear_svm_pred))
+linear_svm_auc <- auc(linear_svm_roc_curve)
+
+# RBF SVM
+rbf_svm_acc <- mean(rbf_svm_pred == test_class_labels)
+rbf_svm_conf_matrix <- table(Actual = test_class_labels, Predicted = rbf_svm_pred)
+rbf_svm_precision <- rbf_svm_conf_matrix[2, 2] / sum(rbf_svm_conf_matrix[, 2])
+rbf_svm_recall <- rbf_svm_conf_matrix[2, 2] / sum(rbf_svm_conf_matrix[2, ])
+rbf_svm_f1_score <- 2 * (rbf_svm_precision * rbf_svm_recall) / (rbf_svm_precision + rbf_svm_recall)
+rbf_svm_roc_curve <- roc(test_class_labels, as.numeric(rbf_svm_pred))
+rbf_svm_auc <- auc(rbf_svm_roc_curve)
+
+# Linear SVM amb 3-fold cross-validation
+crossv_linear_svm_acc <- mean(linear_svm_mcar_pred == test_class_labels)
+crossv_linear_svm_conf_matrix <- table(Actual = test_class_labels, Predicted = linear_svm_mcar_pred)
+crossv_linear_svm_precision <- crossv_linear_svm_conf_matrix[2, 2] / sum(crossv_linear_svm_conf_matrix[, 2])
+crossv_linear_svm_recall <- crossv_linear_svm_conf_matrix[2, 2] / sum(crossv_linear_svm_conf_matrix[2, ])
+crossv_linear_svm_f1_score <- 2 * (crossv_linear_svm_precision * crossv_linear_svm_recall) / (crossv_linear_svm_precision + crossv_linear_svm_recall)
+crossv_linear_svm_roc_curve <- roc(test_class_labels, as.numeric(linear_svm_mcar_pred))
+crossv_linear_svm_auc <- auc(crossv_linear_svm_roc_curve)
+
+# RBF SVM amb exploració dels hiperparameters
+hiper_rbf_svm_acc <- mean(rbf_svm_pred == test_class_labels)
+hiper_rbf_svm_conf_matrix <- table(Actual = test_class_labels, Predicted = rbf_svm_pred)
+hiper_rbf_svm_precision <- hiper_rbf_svm_conf_matrix[2, 2] / sum(hiper_rbf_svm_conf_matrix[, 2])
+hiper_rbf_svm_recall <- hiper_rbf_svm_conf_matrix[2, 2] / sum(hiper_rbf_svm_conf_matrix[2, ])
+hiper_rbf_svm_f1_score <- 2 * (hiper_rbf_svm_precision * hiper_rbf_svm_recall) / (hiper_rbf_svm_precision + hiper_rbf_svm_recall)
+hiper_rbf_svm_roc_curve <- roc(test_class_labels, as.numeric(rbf_svm_pred))
+hiper_rbf_svm_auc <- auc(hiper_rbf_svm_roc_curve)
+
+summary_table <- data.frame(
+  Model = c("Linear SVM", "RBF SVM", "Linear SVM (3-fold CV)", "RBF SVM (Best Hyperparameters)"),
+  Accuracy = c(linear_svm_acc, rbf_svm_acc, crossv_linear_svm_acc, hiper_rbf_svm_acc),
+  Precision = c(linear_svm_precision, rbf_svm_precision, crossv_linear_svm_precision, hiper_rbf_svm_precision),
+  Recall = c(linear_svm_recall, rbf_svm_recall, crossv_linear_svm_recall, hiper_rbf_svm_recall),
+  F1_Score = c(linear_svm_f1_score, rbf_svm_f1_score, crossv_linear_svm_f1_score, hiper_rbf_svm_f1_score),
+  AUC_ROC = c(linear_svm_auc, rbf_svm_auc, crossv_linear_svm_auc, hiper_rbf_svm_auc),
+  stringsAsFactors = FALSE
+)
+
+print(summary_table)
+```
+
+
+Els 4 models utilitzats per classificar i identificar promotors en E.Coli a partir de les seqüències presenten un rendiment similar. Els 4 models emprats presenten el mateix valor d'accuracy força elevat. Si observem les matrius de confusió podem comprovar aquest valor:
+
+(TN + TP) / (TN + FP + FN + TP)
+(17 + 13) / (35) = 30 / 35 = 0.8571 = 85.71% accuracy
+
+Els dos models amb kernel lineal presenten els mateixos resultats i el mateix succeeix amb els dos amb el kernel RBF. Tanmateix, varia subtilment el valor d'FP (false positive) i FN (false negative) entre els models amb kernel lineal i els models amb kernel RBF. En el cas dels models amb kernel lineal FP = 3 i FN = 2, mentre que en els models amb kernel RBF, FP = 4 i FN = 1.
+
+Malgrat la natura inherentment no lineal de les seqüències d'ADN i la complexitat associada amb la identificació de promotors, el fet que els models SVM amb kernel lineal obtinguin resultats comparables als models amb kernel RBF suggereix que els models amb kernels lineals poden estar capturant patrons essencials igual de bé que els models amb kernel RBF. Tanmateix, cal considerar donada la natura i complexitat dels processos biològics que envolten la comprensió de les seqüències promotores, la possibilitat que els models amb kernel RBF poden tenir un major potencial per captar millor relacions no lineals.
+
+Si  comparem els dos models amb kernel lineal, el model amb validació creuada (3-fold CV) no sembla impactar significativament els resultats, indicant que, tot i la mida relativament petita del conjunt de dades (105 mostres), la generalització dels models és estable. És probable que en conjunts de dades superiors, aquest model tingui un major impacte.
+
+Els resultats de precisió, recall i l'F1 Score estan força equilibrats en els 4 models, i en general s'identifiquen correctament les seqüències promotores. Tanmateix, entre els models amb kernel lineal i RBF, els falsos positius (FP) varien en una unitat, detectant 3 FP els models amb kernel lineal en comptes dels 4 FPs dels models amb kernel RBF.
+
+La mida de la mostra és força petit, sent la mida del train 70 registres i del test 35. Això pot explicar en part el perquè de la similitud en els resultats tot i experimentar variacions entre els models. Alhora, la mida del conjunt de dades pot limitar la capacitat d'entrenament del model, tendir al sobre ajustament i tenir una capacitat menor de generalització davant de dades noves.
+
+Considerant els resultats obtinguts i la mida de la mostra actual, els 4 models performen de forma similar, tanmateix, si haguéssim de triar un, una bona opció seria el model SVM amb kernel RBF amb els hiperparàmetres optimitzats, ja que la seva condició de kernel no lineal permet capturar relacions més complexes presents en les dades d'origen biològic o el model amb kernel lineal i fold cross validation, el qual pot ser útil amb conjunts de dades majors i mostra una ràtio de falsos positius menor. Tot i això, seria necessari testejar els 4 models amb un conjunt de dades més gran per poder valorar millor el rendiment dels models.
